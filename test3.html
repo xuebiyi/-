@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>二阶系统动态演示与性能分析</title>
+    <style>
+        :root {
+            --primary-color: #4CAF50;
+            --secondary-color: #2E7D32;
+            --bg-color: #f5f5f5;
+        }
+
+        html {
+            font-size: 14px;
+        }
+
+        body {
+            font-family: 'Arial', sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+            background-color: var(--bg-color);
+            min-height: 100vh;
+        }
+
+        @media (min-width: 768px) {
+            html {
+                font-size: 16px;
+            }
+            
+            body {
+                max-width: 1200px;
+                margin: 0 auto;
+                padding: 3px;
+            }
+        }
+
+        header {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 20px;
+            text-align: center;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        h1 { font-size: 2rem; }
+        h2 { font-size: 1.5rem; }
+        h3 { font-size: 1.2rem; }
+        h1, h2, h3 { color: var(--secondary-color); }
+
+        .system-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 25px;
+            margin-bottom: 3px;
+        }
+
+        .system-card {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 20px;
+            box-shadow: 0 3px 10px rgba(0,0,0,0.05);
+            transition: transform 0.3s ease;
+        }
+
+        .system-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        .simulation {
+        width: 100%;
+        height: 10vh;
+        min-height: 180px;
+        max-height: 500px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        background: white;
+        margin: 1px 0;
+    }
+
+        .controls {
+            margin-top: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .control-group {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 10px;
+        }
+
+        label {
+            font-weight: 600;
+            min-width: 100px;
+            color: #555;
+        }
+
+        input[type="range"] {
+            flex: 1;
+            max-width: 600px;
+            height: 6px;
+            background: #ddd;
+            border-radius: 3px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            background: var(--primary-color);
+            border-radius: 50%;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+
+        input[type="range"]:hover::-webkit-slider-thumb {
+            background: var(--secondary-color);
+        }
+
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-weight: 500;
+        }
+
+        button:hover {
+            background-color: var(--secondary-color);
+            transform: translateY(-1px);
+        }
+
+        .metrics {
+            margin-top: 10px;
+            padding: 1px;
+            background: white;
+            border-radius: 8px;
+            border-left: 4px solid var(--primary-color);
+            overflow-x: auto;
+        }
+
+        .metrics-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1px;
+            min-width: 400px;
+
+        }
+
+        .metrics-table th, 
+        .metrics-table td {
+            padding: 1px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        .metrics-table th {
+            background-color: #f8f8f8;
+            font-weight: 600;
+        }
+
+        .metrics-table td:last-child {
+            color: #666;
+            font-style: italic;
+        }
+
+        .chart-container {
+            position: relative;
+            width: 100%;
+            height: 30vh;
+            min-height: 20px;
+            max-height: 400px;
+            margin-top: 2px;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 1px;
+            flex-wrap: wrap;
+        }
+
+        @media (max-width: 480px) {
+            .control-group {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            input[type="range"] {
+                max-width: 100%;
+                width: 100%;
+            }
+
+            button {
+                flex: 1 1 120px;
+                font-size: 0.9rem;
+            }
+
+            .metrics-table {
+                font-size: 0.9rem;
+            }
+            .canvas-container {
+            width: 70%;
+            height: 70%;
+            max-width: 600px;
+    }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>二阶系统动态演示与性能分析</h1>
+
+    </header>
+    
+    <section>
+        <h2>什么是二阶系统？</h2>
+        <p>二阶系统是指可以用二阶微分方程描述的系统，常见于物理、工程和生物等领域。这些系统的行为通常由阻尼比(ζ)和固有频率(ωₙ)等参数决定。</p>
+    </section>
+    
+    <section>
+        <h2>系统演示</h2>
+        <div class="system-container">
+            <!-- 弹簧质量系统 -->
+            <div class="system-card">
+                <h3>弹簧-质量-阻尼系统</h3>
+                <div class="simulation" id="spring-mass-sim">
+                    <canvas id="springCanvas" width="800" height="180"></canvas>
+                </div>
+                <p>描述质量块在弹簧力和阻尼力作用下的运动。</p>
+                <div class="controls">
+                    <div class="control-group">
+                        <label for="input-magnitude">输入幅值:</label>
+                        <input type="range" id="input-magnitude" min="1" max="50" step="1" value="20">
+                        <span id="input-value">20.0 N</span>
+                    </div>
+                    <div class="control-group">
+                        <label for="spring-mass">质量 (m):</label>
+                        <input type="range" id="spring-mass" min="0.5" max="5" step="0.1" value="1">
+                        <span id="mass-value">1.0 kg</span>
+                    </div>
+                    <div class="control-group">
+                        <label for="spring-constant">弹簧常数 (k):</label>
+                        <input type="range" id="spring-constant" min="1" max="20" step="0.5" value="10">
+                        <span id="spring-value">10 N/m</span>
+                    </div>
+                    <div class="control-group">
+                        <label for="damping-coeff">阻尼系数 (c):</label>
+                        <input type="range" id="damping-coeff" min="0" max="10" step="0.1" value="1">
+                        <span id="damping-value">1 N·s/m</span>
+                    </div>
+                    <div class="button-group">
+                        <button id="start-spring">开始模拟</button>
+                        <button id="pause-spring" disabled>暂停</button>
+                        <button id="reset-spring">重置系统</button>
+                    </div>
+                </div>
+                
+                <!-- 性能指标分析 -->
+                <div class="metrics">
+
+                    <table class="metrics-table">
+                        <tr>
+                            <th>参数</th>
+                            <th>值</th>
+                            <th>理论预测</th>
+                        </tr>
+                        <tr>
+                            <td>阻尼比 (ζ)</td>
+                            <td id="damping-ratio">0.00</td>
+                            <td>-</td>
+                        </tr>
+                        <tr>
+                            <td>固有频率 (ωₙ)</td>
+                            <td id="natural-frequency">0.00 rad/s</td>
+                            <td>-</td>
+                        </tr>
+                        <tr>
+                            <td>上升时间</td>
+                            <td id="rise-time">-</td>
+                            <td id="predicted-rise-time">-</td>
+                        </tr>
+                        <tr>
+                            <td>峰值时间</td>
+                            <td id="peak-time">-</td>
+                            <td id="predicted-peak-time">-</td>
+                        </tr>
+                        <tr>
+                            <td>超调量</td>
+                            <td id="overshoot">-</td>
+                            <td id="predicted-overshoot">-</td>
+                        </tr>
+                        <tr>
+                            <td>调节时间</td>
+                            <td id="settling-time">-</td>
+                            <td id="predicted-settling-time">-</td>
+                        </tr>
+                    </table>
+                    
+                    <div class="chart-container">
+                        <canvas id="responseChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+  <!-- <section>
+        <h2>系统响应类型</h2>
+       <p>根据阻尼比(ζ)的不同，二阶系统可以表现出不同的响应特性：</p>
+        <ul>
+          <li><strong>欠阻尼 (0 &le; ζ &lt; 1)</strong>: 系统会振荡并逐渐趋于稳态</li>
+        <li><strong>临界阻尼 (ζ = 1)</strong>: 系统以最快速度无振荡地达到稳态</li>
+          <li><strong>过阻尼 (ζ &gt; 1)</strong>: 系统缓慢无振荡地达到稳态</li>
+        </ul>
+
+    </section>
+-->
+    <!-- 引入Chart.js库用于绘制响应曲线 -->
+    <script src="chart.js"></script>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // 弹簧质量系统模拟
+            const springCanvas = document.getElementById('springCanvas');
+            const springCtx = springCanvas.getContext('2d');
+            
+            // 获取控制元素
+            const inputSlider = document.getElementById('input-magnitude');
+            const massSlider = document.getElementById('spring-mass');
+            const springSlider = document.getElementById('spring-constant');
+            const dampingSlider = document.getElementById('damping-coeff');
+            const startSpringBtn = document.getElementById('start-spring');
+            const pauseSpringBtn = document.getElementById('pause-spring');
+            const resetSpringBtn = document.getElementById('reset-spring');
+            
+            // 显示当前值的元素
+            const inputValue = document.getElementById('input-value');
+            const massValue = document.getElementById('mass-value');
+            const springValue = document.getElementById('spring-value');
+            const dampingValue = document.getElementById('damping-value');
+            
+            // 性能指标显示元素
+            const dampingRatioEl = document.getElementById('damping-ratio');
+            const naturalFrequencyEl = document.getElementById('natural-frequency');
+            const riseTimeEl = document.getElementById('rise-time');
+            const peakTimeEl = document.getElementById('peak-time');
+            const overshootEl = document.getElementById('overshoot');
+            const settlingTimeEl = document.getElementById('settling-time');
+            
+            // 理论预测值显示元素
+            const predictedRiseTimeEl = document.getElementById('predicted-rise-time');
+            const predictedPeakTimeEl = document.getElementById('predicted-peak-time');
+            const predictedOvershootEl = document.getElementById('predicted-overshoot');
+            const predictedSettlingTimeEl = document.getElementById('predicted-settling-time');
+            
+            // 初始化响应图表
+            const responseChartCtx = document.getElementById('responseChart').getContext('2d');
+            
+            let responseChart = new Chart(responseChartCtx, {
+                type: 'line',
+                data: {
+                    labels: [],
+                    datasets: [
+                        {
+                            label: '系统响应(m)',
+                            data: [],
+                            borderColor: '#4CAF50',
+                            borderWidth: 2,
+                            fill: false
+                        },
+                        {
+                            label: '输入信号在位移上的作用量(F/k)',
+                            data: [],
+                            borderColor: '#FF5722',
+                            borderWidth: 1,
+                            borderDash: [5, 5],
+                            fill: false
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false, // 允许自由调整比例
+                    plugins: {
+                    legend: {
+                             position: 'top' // 图例位置优化
+                        }},
+                    scales: {
+                        x: {
+                            title: {
+                                display: true,
+                                text: '时间 (s)'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: '位移 (m)'
+                            },
+                            beginAtZero: true
+                        }
+                    },
+                    animation: {
+                        duration: 0
+                    }
+                }
+            });
+            
+            // 模拟变量
+            let animationId;
+            let position = 0;
+            let velocity = 0;
+            let time = 0;
+            const dt = 0.016; // 标注时间步长
+            let isPaused = false;
+            
+            // 用于记录响应数据的变量
+            let responseData = [];
+            let inputData = [];
+            let timeData = [];
+            let maxPosition = 0;
+            let peakTime = 0;
+            let riseTime = 0;
+            let settlingTime = 0;
+            let overshoot = 0;
+            let steadyStateValue = 0;
+            let peakfinish=0;
+            let riseTime1=0;
+            let riseTime2=0;
+            
+            // 更新显示值
+            inputSlider.addEventListener('input', function() {
+                inputValue.textContent = this.value + ' N';
+            });
+            
+            massSlider.addEventListener('input', function() {
+                massValue.textContent = this.value + ' kg';
+                updateSystemParameters();
+            });
+            
+            springSlider.addEventListener('input', function() {
+                springValue.textContent = this.value + ' N/m';
+                updateSystemParameters();
+            });
+            
+            dampingSlider.addEventListener('input', function() {
+                dampingValue.textContent = this.value + ' N·s/m';
+                updateSystemParameters();
+            });
+            
+            // 计算系统参数和理论预测值
+            function updateSystemParameters() {
+                const mass = parseFloat(massSlider.value);// 质量
+                const k = parseFloat(springSlider.value);// 弹簧常数
+                const c = parseFloat(dampingSlider.value);// 阻尼系数
+                // 计算固有频率 (ωₙ = sqrt(k/m))
+                const omega_n = Math.sqrt(k / mass);
+                // 计算阻尼比 (ζ = c / (2*sqrt(m*k)))
+                const zeta = c / (2 * Math.sqrt(mass * k));
+                // 更新显示
+                dampingRatioEl.textContent = zeta.toFixed(3);
+                naturalFrequencyEl.textContent = omega_n.toFixed(3) + ' rad/s';
+                // 预测性能指标（理论值）
+                if (zeta < 1) { // 欠阻尼系统
+                    const omega_d = omega_n * Math.sqrt(1 - zeta*zeta); // 阻尼振荡频率
+                    // 上升时间 (π - arccos(ζ)) / ω_d
+                    const predictedRiseTime = (Math.PI - Math.acos(zeta)) / omega_d;
+                    // 峰值时间 π / ω_d
+                    const predictedPeakTime = Math.PI / omega_d;
+                    // 超调量 exp(-ζπ/sqrt(1-ζ²)) * 100%
+                    const predictedOvershoot = Math.exp(-zeta * Math.PI / Math.sqrt(1 - zeta*zeta)) * 100;
+                    // 调节时间 (4 / ζωₙ) for ±2% criterion
+                    const predictedSettlingTime = 4 / (zeta * omega_n);
+                    
+                    predictedRiseTimeEl.textContent = predictedRiseTime.toFixed(3) + ' s';
+                    predictedPeakTimeEl.textContent = predictedPeakTime.toFixed(3) + ' s';
+                    predictedOvershootEl.textContent = predictedOvershoot.toFixed(1) + ' %';
+                    predictedSettlingTimeEl.textContent = predictedSettlingTime.toFixed(3) + ' s'+'(估计值)';
+                } else { // 临界阻尼或过阻尼 a
+                    predictedRiseTimeEl.textContent = 'N/A';
+                    predictedPeakTimeEl.textContent = 'N/A';
+                    predictedOvershootEl.textContent = '0 %';
+                    predictedSettlingTimeEl.textContent = 'N/A';
+                }
+            }
+            
+            // 初始化系统参数
+            updateSystemParameters();
+            
+            function simulateSpringMass() {
+                if (isPaused) return;
+                
+                const mass = parseFloat(massSlider.value);
+                const k = parseFloat(springSlider.value);
+                const c = parseFloat(dampingSlider.value);
+                const inputMag = parseFloat(inputSlider.value)/k;
+                
+                // 计算加速度 (F = ma => a = (-kx - cv + u)/m)
+                // 其中u是输入信号（阶跃输入）
+                const inputSignal = time > 0.5 ? inputMag : 0; // 0.5秒后施加输入
+                const acceleration = (-k * position - c * velocity +  k*inputSignal) / mass;
+                
+                // 更新速度和位置
+                velocity += acceleration * dt;
+                position += velocity * dt;
+                time += dt;
+                
+                // 记录响应数据
+                responseData.push(position);
+                inputData.push(inputSignal);
+                timeData.push(time);
+                
+                // 更新性能指标
+                updatePerformanceMetrics(position, time, inputSignal);
+                
+                // 绘制系统
+                drawSpringMassSystem(position);
+                
+                // 更新图表
+                updateResponseChart();
+                
+                // 继续动画
+                animationId = requestAnimationFrame(simulateSpringMass);
+            }
+            
+            function updatePerformanceMetrics(currentPosition, currentTime, currentInput) {
+
+                if (currentInput === 0) return;
+                
+                // 记录最大位移（用于计算超调量）
+                if (peakfinish==0 && Math.abs(currentPosition) > Math.abs(maxPosition)) {
+                    maxPosition = currentPosition;
+                    peakTime = currentTime;
+                }
+                else{
+                  peakfinish=1;
+                }
+                const mass = parseFloat(massSlider.value);// 质量
+                const k = parseFloat(springSlider.value);// 弹簧常数
+                const c = parseFloat(dampingSlider.value);// 阻尼系数
+                const zeta = c / (2 * Math.sqrt(mass * k));
+               
+                const inputMag = parseFloat(inputSlider.value)/k;
+
+                if (riseTime === 0 && peakfinish == 1&&  zeta<1) {
+                    // 寻找第一次到达稳态值的点
+                    for (let i = 1; i < responseData.length; i++) {
+  
+                        if ((responseData[i-1] < inputMag  && responseData[i] >= inputMag )) {
+                            
+                            // 线性插值精确计算到达时间
+                            const t1 = timeData[i-1];
+                            const t2 = timeData[i];
+                            const y1 = responseData[i-1];
+                            const y2 = responseData[i];
+                            riseTime = t1 + (inputMag  - y1) * (t2 - t1) / (y2 - y1) - 0.5; // 减去输入延迟时间
+                            riseTimeEl.textContent = riseTime.toFixed(3) + 's'+'(0%->100%)';
+                            break;
+                        }
+                    }
+                  }
+                // 修改zeta≥1的条件判断部分
+if (riseTime === 0 && zeta >=1) {
+    for (let i = 1; i < responseData.length; i++) {
+        if (riseTime1===0 && responseData[i]>=0.1*inputMag) {
+            riseTime1 = timeData[i];
+        }
+        if (riseTime2===0 && responseData[i]>0.9*inputMag) {
+            riseTime2 = timeData[i];
+        }
+    }
+    if (riseTime1 && riseTime2) {
+        riseTime = riseTime2 - riseTime1;
+        riseTimeEl.textContent = riseTime.toFixed(3) + 's'+'(10%->90%)';
+    }
+}
+                if (responseData.length > 200) {
+                    overshoot = ((maxPosition - inputMag) / inputMag) * 100;
+                    overshootEl.textContent = Math.max(0, overshoot).toFixed(1) + ' %';
+                }
+                
+                        
+                // 更新峰值时间
+                if (peakTime !== 0) {
+                    peakTimeEl.textContent = (peakTime - 0.5).toFixed(3) + ' s'; // 减去输入延迟时间
+                }
+
+if(responseData.length==1){
+let earliestValidIndex = -1; 
+let lastValidIndex = -1;
+}
+// 判断逻辑：
+if (responseData.length > 0 ) {
+    const k = parseFloat(springSlider.value);// 弹簧常数
+    const inputMag = parseFloat(inputSlider.value)/k;
+    const currentIndex = responseData.length - 1;
+    const currentValue = responseData[currentIndex];
+    const currentInRange = 0.98*inputMag<currentValue&&currentValue<1.02* inputMag;
+
+    if (currentInRange) {
+        // 当前点符合条件
+        if (earliestValidIndex === -1) {
+            // 如果还没有最早符合点，设置当前点为最早符合点
+            earliestValidIndex = currentIndex;
+        }
+        // 如果已经有最早符合点，保持它不变
+    } else {
+        // 当前点不符合条件，清空标记
+        earliestValidIndex = -1;
+    }
+
+    // 更新显示（如果有有效的最早符合点）
+    if (earliestValidIndex !== -1) {
+        const settlingTime = Math.max(0, timeData[earliestValidIndex]-0.5);
+        settlingTimeEl.textContent = settlingTime.toFixed(3) + ' s'+'(±2%)';
+    }
+}
+}
+            
+            
+function updateResponseChart() {
+                const maxDataPoints = 500;
+                let step = Math.ceil(timeData.length / maxDataPoints);
+                step = Math.max(1, step);
+                
+                const labels = [];
+                const responseDataPoints = [];
+                const inputDataPoints = [];
+                
+                for (let i = 0; i < timeData.length; i += step) {
+                    labels.push(timeData[i].toFixed(2));
+                    responseDataPoints.push(responseData[i]);
+                    inputDataPoints.push(inputData[i]);
+                }
+                
+                responseChart.data.labels = labels;
+                responseChart.data.datasets[0].data = responseDataPoints;
+                responseChart.data.datasets[1].data = inputDataPoints;
+                
+                // 动态扩展 X 轴
+                const currentMaxTime = Math.max(...timeData);
+                const xAxis = responseChart.options.scales.x;
+                if (currentMaxTime > xAxis.max) {
+                    xAxis.max = Math.ceil(currentMaxTime / 5) * 5;
+                }
+                
+                // 优化 Y 轴范围
+                const allYValues = [...responseDataPoints, ...inputDataPoints];
+                let minY = Math.min(...allYValues);
+                let maxY = Math.max(...allYValues);
+                
+                if (minY === maxY) {
+                    minY -= 1;
+                    maxY += 1;
+                } else {
+                    const padding = (maxY - minY) * 0.1;
+                    minY -= padding;
+                    maxY += padding;
+                }
+                
+                responseChart.options.scales.y.min = minY;
+                responseChart.options.scales.y.max = maxY;
+                
+                responseChart.update();
+            }
+            
+        function drawSpringMassSystem(pos) {
+        const canvasWidth = springCanvas.width;
+        const canvasHeight = springCanvas.height;
+        const centerY = canvasHeight*0.7;
+
+        springCtx.clearRect(0, 0, canvasWidth, canvasHeight);
+        
+        // 固定点（居中左侧）
+        const anchorX = canvasWidth * 0.1;
+        springCtx.beginPath();
+        springCtx.arc(anchorX, centerY, 8, 0, Math.PI * 2);
+        springCtx.fillStyle = '#333';
+        springCtx.fill();
+
+        // 弹簧参数
+        const springLength = canvasWidth * 0.02 + pos * (canvasWidth * 0.06);
+        const coils = 10;
+        const coilHeight = 20;
+        
+
+
+
+        
+        // 绘制弹簧
+        springCtx.beginPath();
+        springCtx.moveTo(anchorX, centerY);
+        for (let i = 0; i < coils; i++) {
+            const x = anchorX + (i * springLength / coils);
+            const y = centerY + (i % 2 === 0 ? coilHeight : -coilHeight);
+            springCtx.lineTo(x, y);
+        }
+        springCtx.lineTo(anchorX + springLength, centerY);
+        springCtx.strokeStyle = '#666';
+        springCtx.lineWidth = 3;
+        springCtx.stroke();
+
+
+
+        // 质量块（居中右侧）
+        const massWidth = 60;
+        const massHeight = 80;
+        springCtx.fillStyle = '#4CAF50';
+        springCtx.fillRect(
+            anchorX + springLength - 10, 
+            centerY - massHeight/2,
+            massWidth, 
+            massHeight
+        );
+
+        // 地面基线
+        springCtx.beginPath();
+        springCtx.moveTo(0, centerY +massHeight/2  +10);
+        springCtx.lineTo(canvasWidth,centerY +massHeight/2  +10 );
+        springCtx.strokeStyle = '#333';
+        springCtx.lineWidth = 2;
+        springCtx.stroke();
+
+
+
+    }
+            
+            function resetSimulation() {
+                // 停止当前动画
+                if (animationId) {
+                    cancelAnimationFrame(animationId);
+                    animationId = null;
+                }
+                
+                // 重置模拟变量
+                position = 0;
+                velocity = 0;
+                time = 0;
+                isPaused = false;
+                
+                // 重置性能指标
+                responseData = [];
+                inputData = [];
+                timeData = [];
+                maxPosition = 0;
+                peakTime = 0;
+                riseTime = 0;
+                settlingTime = 0;
+                overshoot = 0;
+                steadyStateValue = 0;
+                peakfinish = 0;
+                
+                // 重置图表
+                responseChart.data.labels = [];
+                responseChart.data.datasets[0].data = [];
+                responseChart.data.datasets[1].data = [];
+                responseChart.update();
+                
+                // 更新按钮状态
+                startSpringBtn.textContent = "开始模拟";
+                pauseSpringBtn.disabled = true;
+                pauseSpringBtn.textContent = "暂停";
+                
+                // 绘制初始状态
+                drawSpringMassSystem(0);
+                
+                // 重置实际测量值显示（保留理论预测值）
+                riseTimeEl.textContent = '-';
+                peakTimeEl.textContent = '-';
+                overshootEl.textContent = '-';
+                settlingTimeEl.textContent = '-';
+                
+                // 重新计算理论预测值（确保参数变化后预测值更新）
+                updateSystemParameters();
+            }
+            
+            function togglePause() {
+                isPaused = !isPaused;
+                pauseSpringBtn.textContent = isPaused ? "继续" : "暂停";
+                
+                if (!isPaused) {
+                    simulateSpringMass();
+                }
+            }
+            
+            startSpringBtn.addEventListener('click', function() {
+                // 如果动画已经在运行，先停止
+                if (animationId) {
+                    cancelAnimationFrame(animationId);
+                }
+                
+                resetSimulation();
+                isPaused = false;
+                pauseSpringBtn.disabled = false;
+                startSpringBtn.textContent = "重新开始";
+                simulateSpringMass();
+            });
+            
+            pauseSpringBtn.addEventListener('click', togglePause);
+            resetSpringBtn.addEventListener('click', resetSimulation);
+            
+            // 初始绘制
+            drawSpringMassSystem(0);
+        });
+    </script>
+</body>
+</html>
